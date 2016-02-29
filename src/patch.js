@@ -74,11 +74,11 @@ export default class Patch {
     }
   }
 
-  spliceWithText (newStart, oldExtent, newText, options) {
-    this.splice(newStart, oldExtent, getExtent(newText), {text: newText})
+  spliceWithText (newStart, oldExtent, newText, metadata) {
+    this.splice(newStart, oldExtent, getExtent(newText), {text: newText, metadata})
   }
 
-  splice (newStart, oldExtent, newExtent, options) {
+  splice (newStart, oldExtent, newExtent, options = {}) {
     if (isZeroPoint(oldExtent) && isZeroPoint(newExtent)) return
 
     let oldEnd = traverse(newStart, oldExtent)
@@ -99,7 +99,8 @@ export default class Patch {
 
     endNode.outputExtent = traverse(newEnd, traversalDistance(endNode.outputExtent, endNode.outputLeftExtent))
     endNode.outputLeftExtent = newEnd
-    endNode.newText = options && options.text
+    if (options.text != null) endNode.newText = options.text
+    if (options.metadata != null) endNode.metadata = options.metadata
 
     if (endNode.isChangeStart) {
       let rightAncestor = this.bubbleNodeDown(endNode)
