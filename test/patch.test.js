@@ -40,6 +40,32 @@ describe('Patch', function () {
     ])
   })
 
+  it('allows metadata to be associated with splices', () => {
+    let patch = new Patch()
+    patch.splice({row: 0, column: 3}, {row: 0, column: 4}, {row: 0, column: 5}, {metadata: {a: 1}})
+    patch.splice({row: 0, column: 10}, {row: 0, column: 5}, {row: 0, column: 5}, {metadata: {b: 2}})
+
+    let iterator = patch.buildIterator()
+    iterator.moveToBeginning()
+    assert(!iterator.inChange())
+
+    iterator.moveToSuccessor()
+    assert(iterator.inChange())
+    assert.deepEqual(iterator.getMetadata(), {a: 1})
+
+    iterator.moveToSuccessor()
+    assert(!iterator.inChange())
+
+    iterator.moveToSuccessor()
+    assert(iterator.inChange())
+    assert.deepEqual(iterator.getMetadata(), {b: 2})
+
+    assert.deepEqual(patch.getChanges(), [
+      {oldStart: {row: 0, column: 3}, newStart: {row: 0, column: 3}, oldExtent: {row: 0, column: 4}, newExtent: {row: 0, column: 5}, metadata: {a: 1}},
+      {oldStart: {row: 0, column: 9}, newStart: {row: 0, column: 10}, oldExtent: {row: 0, column: 5}, newExtent: {row: 0, column: 5}, metadata: {b: 2}}
+    ])
+  })
+
   it('correctly records random splices', function () {
     this.timeout(Infinity)
 

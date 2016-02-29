@@ -57,9 +57,8 @@ export default class Iterator {
         oldExtent: traversalDistance(this.inputEnd, this.inputStart),
         newExtent: traversalDistance(this.outputEnd, this.outputStart),
       }
-      if (this.currentNode.newText != null) {
-        change.newText = this.currentNode.newText
-      }
+      if (this.currentNode.newText != null) change.newText = this.currentNode.newText
+      if (this.currentNode.metadata != null) change.metadata = this.currentNode.metadata
 
       changes.push(change)
     }
@@ -97,6 +96,10 @@ export default class Iterator {
 
   getNewText () {
     return this.currentNode.newText
+  }
+
+  getMetadata () {
+    return this.currentNode.metadata
   }
 
   insertSpliceBoundary (boundaryOutputPosition, spliceStartNode) {
