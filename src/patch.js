@@ -1,4 +1,4 @@
-import {ZERO_POINT, traverse, traversalDistance, min as minPoint, isZero as isZeroPoint, compare as comparePoints} from './point-helpers'
+import {ZERO_POINT, traverse, traversalDistance, min, isZero, compare} from './point-helpers'
 import {getExtent, characterIndexForPoint} from './text-helpers'
 import Iterator from './iterator'
 import {serializeChanges, deserializeChanges} from './serialization'
@@ -56,7 +56,6 @@ export default class Patch {
   constructor (params = {}) {
     this.root = null
     this.nodesCount = 0
-    this.iterator = this.buildIterator()
     this.cachedChanges = params.cachedChanges
     this.serializedChanges = params.serializedChanges
     if (params.cachedChanges || params.serializedChanges) {
@@ -77,97 +76,168 @@ export default class Patch {
     this.splice = function () { throw new Error("Cannot splice into a read-only Patch!") }
   }
 
-  buildIterator () {
-    return new Iterator(this)
+  spliceWithText (start, oldText, newText) {
+    this.splice(start, getExtent(oldText), getExtent(newText), {oldText, newText})
   }
 
-  rebalance () {
-    this.transformTreeToVine()
-    this.transformVineToBalancedTree()
+  splice (start, oldExtent, newExtent, oldText, newText) {
+    if (isZero(oldExtent) && isZero(newExtent)) return
+
+    // Determine where this splice ends now and where it *will* end once the
+    // old extend is replaced with the new extent.
+    let oldEnd = traverse(start, oldExtent)
+    let newEnd = traverse(start, newExtent)
+
+    // Find an existing change that containins the start of the current splice.
+    // If none exists, an empty placeholder change will be inserted instead.
+    let changeContainingStart = this.splayContainingChange(start)
+
+    // Find an existing change that containins the end of the current splice.
+    // If none exists, an empty placeholder change will be inserted instead.
+    let changeContainingEnd = this.splayContainingChange(oldEnd)
+
+    if (changeContainingStart === changeContainingEnd) {
+      // If the same change contains the start and end of the splice, we just
+      // need to splice the new text into the existing change and adjust its
+      // new extent accordingly. Old text should be ignored because this splice
+      // is entirely within an existing change.
+
+      let startOfChangeContainingStart = changeContainingStart.newDistanceFromEndOfLeftAncestor
+      let endOfChangeContainingStart = traverse(startOfChangeContainingStart, changeContainingStart.newExtent)
+
+      // The new text is the text preceding the start of the splice, plus the
+      // new text associated with the splice, plus the text following the splice.
+      changeContainingStart.newText =
+        getPrefix(changeContainingStart.newText, traversalDistance(start, startOfChangeContainingStart)) +
+          newText +
+            getSuffix(changeContainingStart.newText, traversalDistance(oldEnd, startOfChangeContainingStart))
+
+      // The new extent is the distance from the start of the change containing
+      // the splice to the new end of the change, plus whatever portion of the
+      // change containing the splice followed the splice.
+      changeContainingStart.newExtent =
+        traverse(
+          traversalDistance(newEnd, startOfChangeContainingStart),
+          traversalDistance(endOfChangeContainingStart, oldEnd)
+        )
+    } else {
+      // The change containing the end of the current splice is at the root
+      // of the tree, with the change containing the start of the splice as
+      // its left child. We will replace these changes with a single change.
+
+      let startOfChangeContainingStart = changeContainingStart.newDistanceFromEndOfLeftAncestor
+      let endOfChangeContainingStart = traverse(startOfChangeContainingStart, changeContainingStart.newExtent)
+      let startOfChangeContainingEnd = changeContainingEnd.newDistanceFromEndOfLeftAncestor
+      let endOfChangeContainingEnd = traverse(startOfChangeContainingEnd, changeContainingEnd.newExtent)
+
+      // If the change containing the start of the current splice starts before
+      // the current splice, we need to incorporate the portion of its new text
+      // that we're not overwriting into the new text of the new change we're
+      // creating.
+      changeContainingEnd.newText =
+        getPrefix(changeContainingStart.newText, traversalDistance(start, startOfChangeContainingStart)) +
+          newText +
+            getSuffix(changeContainingEnd.newText, traversalDistance(oldEnd, startOfChangeContainingEnd))
+
+      // The oldText supplied with this splice may actually contain some new
+      // text from a previous splice. We want the old text of the change we're
+      // inserting to reflect the *original* text, so we'll synthesize it from
+      // the this splice's old text and any existing changes.
+      changeContainingEnd.oldText =
+        changeContainingStart +
+          this.synthesizeOldText(
+            this.changesForSubtree(changeContainingStart.rightChild),
+            getPrefix(
+              getSuffix(oldText, traversalDistance(endOfChangeContainingStart, start)),
+              traversalDistance(startOfChangeContainingEnd, endOfChangeContainingStart)
+            )
+          ) +
+            changeContainingEnd.oldText
+
+      // Now we replace the changes containing the start and end with a single
+      // change by mutating the change containing the end and deleting the
+      // change containing the start, effectively merging them.
+
+      // The old extent of the merged nodes is the distance from the old start
+      // of the change containing the splice start to the old end of the change
+      // containing the splice end.
+      changeContainingEnd.oldExtent = traversalDistance(
+        traverse(
+          changeContainingEnd.oldDistanceFromEndOfLeftAncestor,
+          changeContainingEnd.oldExtent
+        ),
+        changeContainingStart.oldDistanceFromEndOfLeftAncestor
+      )
+
+      // The new extent is the distance from the new start of the change
+      // containing the start to the new end of the splice, plus however much
+      // of the change containing the end of the splice we didn't overlap.
+      changeContainingEnd.newExtent = traverse(
+        traversalDistance(newEnd, startOfChangeContainingStart),
+        traversalDistance(endOfChangeContainingEnd, oldEnd)
+      )
+
+      // Now we update the start of the change containing the end of the splice
+      // to match the start of the change containing the start of the splice.
+      changeContainingEnd.oldDistanceFromEndOfLeftAncestor = changeContainingStart.oldDistanceFromEndOfLeftAncestor
+      changeContainingEnd.newDistanceFromEndOfLeftAncestor = changeContainingStart.newDistanceFromEndOfLeftAncestor
+
+      // Then we delete the node representing the change containing the start
+      // of the splice along with all changes in between it and the change
+      // containing the end of the splice. This completes the merging of the
+      // changes containing the start and end of the splice into a single
+      // change.
+      changeContainingEnd.leftChild = changeContainingStart.leftChild
+    }
+
+    // Bust the cache.
+    this.cachedChanges = null
   }
 
-  transformTreeToVine () {
-    let pseudoRoot = this.root
-    while (pseudoRoot != null) {
-      let leftChild = pseudoRoot.left
-      let rightChild = pseudoRoot.right
-      if (leftChild != null) {
-        this.rotateNodeRight(leftChild)
-        pseudoRoot = leftChild
+  // Finds or creates a node at the root of the tree representing a change
+  // containing the given target point. If no existing change is found, an
+  // empty change is created.
+  //
+  // This method follows a top-down strategy, dividing the existing tree into
+  // left and right subtrees that will eventually be appended as left and right
+  // children of the returned node.
+  splayContainingChange (target) {
+    if (!this.root) {
+      this.root = new Node(target, target)
+      return this.root
+    }
+
+    let newLeftSubtree = new Node(null, null)
+    let newRightSubtree = new Node(null, null)
+    let newLeftSubtreeMax = newLeftSubtree
+    let newRightSubtreeMin = newRightSubtree
+
+    let leftAncestorEnd = ZERO_POINT
+    let currentNode = this.root
+
+    while (true) {
+      let currentNodeStart = traverse(leftAncestorEnd, currentNode.newDistanceFromEndOfLeftAncestor)
+
+      if (compare(target, currentNodeStart) < 0) {
+        // Descend left
       } else {
-        pseudoRoot = rightChild
+        let currentNodeEnd = traverse(currentNodeStart, currentNode.newExtent)
+        if (compare(target, currentNodeEnd) > 0) {
+          // Descend right
+        }
+
+        // We found a node containing the target position
+        break
       }
     }
-  }
 
-  transformVineToBalancedTree() {
-    let n = this.nodesCount
-    let m = Math.pow(2, Math.floor(Math.log2(n + 1))) - 1
-    this.performRebalancingRotations(n - m)
-    while (m > 1) {
-      m = Math.floor(m / 2)
-      this.performRebalancingRotations(m)
-    }
-  }
+    newLeftSubtreeMax.rightChild = currentNode.leftChild
+    newRightSubtreeMin.leftChild = currentNode.rightChild
+    currentNode.leftChild = newLeftSubtree.rightChild
+    currentNode.rightChild = newRightSubtree.leftChild
 
-  performRebalancingRotations (count) {
-    let root = this.root
-    for (var i = 0; i < count; i++) {
-      if (root == null) return
-      let rightChild = root.right
-      if (rightChild == null) return
-      root = rightChild.right
-      this.rotateNodeLeft(rightChild)
-    }
-  }
-
-  spliceWithText (newStart, oldText, newText) {
-    this.splice(newStart, getExtent(oldText), getExtent(newText), {oldText, newText})
-  }
-
-  splice (newStart, oldExtent, newExtent, options = {}) {
-    if (isZeroPoint(oldExtent) && isZeroPoint(newExtent)) return
-
-    let oldEnd = traverse(newStart, oldExtent)
-    let newEnd = traverse(newStart, newExtent)
-
-    let startNode = this.iterator.insertSpliceBoundary(newStart)
-    startNode.isChangeStart = true
-    this.splayNode(startNode)
-
-    let endNode = this.iterator.insertSpliceBoundary(oldEnd, startNode)
-    endNode.isChangeEnd = true
-    this.splayNode(endNode)
-    if (endNode.left !== startNode) this.rotateNodeRight(startNode)
-
-    endNode.outputExtent = traverse(newEnd, traversalDistance(endNode.outputExtent, endNode.outputLeftExtent))
-    endNode.outputLeftExtent = newEnd
-    if (options.newText != null) endNode.newText = options.newText
-    if (options.oldText != null) endNode.oldText = this.replaceChangedText(options.oldText, startNode, endNode)
-
-    startNode.right = null
-    startNode.inputExtent = startNode.inputLeftExtent
-    startNode.outputExtent = startNode.outputLeftExtent
-
-    if (endNode.isChangeStart) {
-      let rightAncestor = this.bubbleNodeDown(endNode)
-      if (endNode.newText != null) rightAncestor.newText = endNode.newText + rightAncestor.newText
-      if (endNode.oldText != null) rightAncestor.oldText = endNode.oldText + rightAncestor.oldText
-      this.deleteNode(endNode)
-    } else if (comparePoints(endNode.outputLeftExtent, startNode.outputLeftExtent) === 0
-        && comparePoints(endNode.inputLeftExtent, startNode.inputLeftExtent) === 0) {
-      startNode.isChangeStart = endNode.isChangeStart
-      this.deleteNode(endNode)
-    }
-
-    if (startNode.isChangeStart && startNode.isChangeEnd) {
-      let rightAncestor = this.bubbleNodeDown(startNode) || this.root
-      if (startNode.newText != null) rightAncestor.newText = startNode.newText + rightAncestor.newText
-      if (startNode.oldText != null) rightAncestor.oldText = startNode.oldText + rightAncestor.oldText
-      this.deleteNode(startNode)
-    }
-
-    this.cachedChanges = null
+    this.root = currentNode
+    return currentNode
   }
 
   replaceChangedText (oldText, startNode, endNode) {

@@ -1,19 +1,17 @@
+import {ZERO_POINT} from './point-helpers'
+
 let idCounter = 0
 
 export default class Node {
-  constructor(parent, inputLeftExtent, outputLeftExtent) {
-    this.parent = parent
-    this.left = null
-    this.right = null
-    this.inputLeftExtent = inputLeftExtent
-    this.outputLeftExtent = outputLeftExtent
-    this.inputExtent = inputLeftExtent
-    this.outputExtent = outputLeftExtent
-
+  constructor(oldDistanceFromEndOfLeftAncestor, newDistanceFromEndOfLeftAncestor) {
     this.id = ++idCounter
-    this.isChangeStart = false
-    this.isChangeEnd = false
-    this.newText = null
-    this.oldText = null
+    this.oldDistanceFromEndOfLeftAncestor = oldDistanceFromEndOfLeftAncestor
+    this.newDistanceFromEndOfLeftAncestor = newDistanceFromEndOfLeftAncestor
+    this.oldExtent = ZERO_POINT
+    this.newExtent = ZERO_POINT
+    this.leftChild = null
+    this.rightChild = null
+    this.newText = ''
+    this.oldText = ''
   }
 }
