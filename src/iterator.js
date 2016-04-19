@@ -157,9 +157,8 @@ export default class Iterator {
         this.rightAncestor.newText = newText.substring(boundaryIndex)
       }
       if (oldText != null) {
-        let boundaryIndex = characterIndexForPoint(oldText, traversalDistance(boundaryOutputPosition, this.leftAncestorOutputPosition))
-        this.currentNode.oldText = oldText.substring(0, boundaryIndex)
-        this.rightAncestor.oldText = oldText.substring(boundaryIndex)
+        this.currentNode.oldText = oldText
+        this.rightAncestor.oldText = ""
       }
     }
 
