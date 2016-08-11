@@ -24,7 +24,7 @@ git clone https://github.com/google/flatbuffers
 git checkout 959866b
 
 # compile flatbuffers
-pushd flatbuffers/build/XCode/
+pushd flatbuffers/build/Xcode/
 xcodebuild
 popd
 ```
