@@ -1,18 +1,30 @@
 #include "helpers/test_helper.h"
 
+uint16_t *str(const char *text) {
+  size_t length = strlen(text);
+  auto result = new uint16_t[length + 1];
+  for (size_t i = 0; i < length; i++) {
+    result[i] = text[i];
+  }
+  result[length] = 0;
+  return result;
+}
+
 TEST_CASE("Records simple non-overlapping splices") {
   Patch patch;
 
-  patch.Splice(Point{0, 5}, Point{0, 3}, Point{0, 4});
-  patch.Splice(Point{0, 10}, Point{0, 3}, Point{0, 4});
+  patch.Splice(Point{0, 5}, Point{0, 3}, Point{0, 4}, str("abcd"));
+  patch.Splice(Point{0, 10}, Point{0, 3}, Point{0, 4}, str("efgh"));
   REQUIRE(patch.GetHunks() == vector<Hunk>({
     Hunk{
       Point{0, 5}, Point{0, 8},
       Point{0, 5}, Point{0, 9},
+      str("abcd")
     },
     Hunk{
       Point{0, 9}, Point{0, 12},
       Point{0, 10}, Point{0, 14},
+      str("efgh")
     }
   }));
 
@@ -25,10 +37,12 @@ TEST_CASE("Records simple non-overlapping splices") {
     Hunk{
       Point{0, 5}, Point{0, 8},
       Point{0, 4}, Point{0, 8},
+      str("abcd")
     },
     Hunk{
       Point{0, 9}, Point{0, 12},
       Point{0, 9}, Point{0, 13},
+      str("efgh")
     }
   }));
 
@@ -45,10 +59,12 @@ TEST_CASE("Records simple non-overlapping splices") {
     Hunk{
       Point{0, 5}, Point{0, 8},
       Point{0, 14}, Point{0, 18},
+      str("abcd")
     },
     Hunk{
       Point{0, 9}, Point{0, 12},
       Point{0, 19}, Point{0, 23},
+      str("efgh")
     }
   }));
 }

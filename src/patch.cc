@@ -21,8 +21,11 @@ struct Node {
   Point new_distance_from_left_ancestor;
   Point old_extent;
   Point new_extent;
+  uint16_t *text;
 
   ~Node() {
+    delete[] text;
+
     if (left) {
       delete left;
     }
@@ -224,13 +227,17 @@ Nan::Maybe<Hunk> Patch::HunkForPosition(Point target) {
     Point new_start = lower_bound->new_distance_from_left_ancestor;
     Point old_end = old_start.Traverse(lower_bound->old_extent);
     Point new_end = new_start.Traverse(lower_bound->new_extent);
-    return Nan::Just(Hunk{old_start, old_end, new_start, new_end});
+    return Nan::Just(Hunk{old_start, old_end, new_start, new_end, lower_bound->text});
   } else {
     return Nan::Nothing<Hunk>();
   }
 }
 
 bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_insertion_extent) {
+  return Splice(new_splice_start, new_deletion_extent, new_insertion_extent, nullptr);
+}
+
+bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_insertion_extent, uint16_t *text) {
   if (is_frozen) {
     return false;
   }
@@ -247,7 +254,8 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
       new_splice_start,
       new_splice_start,
       new_deletion_extent,
-      new_insertion_extent
+      new_insertion_extent,
+      text
     };
     return true;
   }
@@ -340,7 +348,8 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
         old_splice_start,
         new_splice_start,
         old_deletion_end.Traversal(old_splice_start),
-        new_insertion_extent
+        new_insertion_extent,
+        text
       };
 
       lower_bound->DeleteRight();
@@ -376,7 +385,8 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
         old_splice_start,
         new_splice_start,
         old_deletion_end.Traversal(old_splice_start),
-        new_insertion_extent
+        new_insertion_extent,
+        text
       };
       lower_bound->parent = root;
     }
@@ -412,7 +422,8 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
         new_splice_start,
         new_splice_start,
         old_deletion_end.Traversal(new_splice_start),
-        new_insertion_extent
+        new_insertion_extent,
+        text
       };
       upper_bound->parent = root;
       Point distance_from_end_of_root_to_start_of_upper_bound = upper_bound_new_start.Traversal(new_deletion_end);
@@ -432,7 +443,8 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
       new_splice_start,
       new_splice_start,
       old_deletion_end.Traversal(new_splice_start),
-      new_insertion_extent
+      new_insertion_extent,
+      text
     };
   }
 
@@ -612,7 +624,7 @@ vector<Hunk> Patch::GetHunks() const {
     Point new_start = left_ancestor_position.new_end.Traverse(node->new_distance_from_left_ancestor);
     Point old_end = old_start.Traverse(node->old_extent);
     Point new_end = new_start.Traverse(node->new_extent);
-    result.push_back(Hunk{old_start, old_end, new_start, new_end});
+    result.push_back(Hunk{old_start, old_end, new_start, new_end, node->text});
 
     if (node->right) {
       left_ancestor_stack.push_back(PositionStackEntry{old_end, new_end});
