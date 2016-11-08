@@ -31,6 +31,41 @@ describe('Native Patch', function () {
     ])
   })
 
+  it('allows a metadata integer to be associated with hunks', function () {
+    const patch = new Patch()
+
+    patch.splice({row: 0, column: 5}, {row: 0, column: 5}, {row: 0, column: 5}, 1)
+    patch.splice({row: 0, column: 15}, {row: 0, column: 5}, {row: 0, column: 5}, 255)
+    assert.deepEqual(JSON.parse(JSON.stringify(patch.getHunks())), [
+      {
+        oldStart: {row: 0, column: 5},
+        oldEnd: {row: 0, column: 10},
+        newStart: {row: 0, column: 5},
+        newEnd: {row: 0, column: 10},
+        metadata: 1
+      },
+      {
+        oldStart: {row: 0, column: 15},
+        oldEnd: {row: 0, column: 20},
+        newStart: {row: 0, column: 15},
+        newEnd: {row: 0, column: 20},
+        metadata: 255
+      }
+    ])
+
+    // Overwrites metadata of any overlapped existing hunks
+    patch.splice({row: 0, column: 8}, {row: 0, column: 10}, {row: 0, column: 10}, 127)
+    assert.deepEqual(JSON.parse(JSON.stringify(patch.getHunks())), [
+      {
+        oldStart: {row: 0, column: 5},
+        oldEnd: {row: 0, column: 20},
+        newStart: {row: 0, column: 5},
+        newEnd: {row: 0, column: 20},
+        metadata: 127
+      }
+    ])
+  })
+
   it('correctly records random splices', function () {
     this.timeout(Infinity)
 

@@ -10,6 +10,7 @@ public:
   Point old_end;
   Point new_start;
   Point new_end;
+  uint16_t metadata;
 };
 
 inline std::ostream &operator<<(std::ostream &stream, const Hunk &hunk) {

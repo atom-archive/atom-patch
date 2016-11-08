@@ -102,6 +102,7 @@ public:
     Nan::SetAccessor(instance_template, Nan::New("newStart").ToLocalChecked(), GetNewStart);
     Nan::SetAccessor(instance_template, Nan::New("oldEnd").ToLocalChecked(), GetOldEnd);
     Nan::SetAccessor(instance_template, Nan::New("newEnd").ToLocalChecked(), GetNewEnd);
+    Nan::SetAccessor(instance_template, Nan::New("metadata").ToLocalChecked(), GetMetadata);
 
     const auto &prototype_template = constructor_template->PrototypeTemplate();
     prototype_template->Set(Nan::New<String>("toString").ToLocalChecked(), Nan::New<FunctionTemplate>(ToString));
@@ -141,6 +142,11 @@ private:
   static void GetNewEnd(v8::Local<v8::String> property, const Nan::PropertyCallbackInfo<v8::Value>& info) {
     Hunk &hunk = Nan::ObjectWrap::Unwrap<HunkWrapper>(info.This())->hunk;
     info.GetReturnValue().Set(PointWrapper::FromPoint(hunk.new_end));
+  }
+
+  static void GetMetadata(v8::Local<v8::String> property, const Nan::PropertyCallbackInfo<v8::Value>& info) {
+    Hunk &hunk = Nan::ObjectWrap::Unwrap<HunkWrapper>(info.This())->hunk;
+    info.GetReturnValue().Set(Nan::New<Integer>(hunk.metadata));
   }
 
   static void ToString(const Nan::FunctionCallbackInfo<Value> &info) {
@@ -200,8 +206,16 @@ private:
     Nan::Maybe<Point> deletion_extent = PointFromJS(Nan::To<Object>(info[1]));
     Nan::Maybe<Point> insertion_extent = PointFromJS(Nan::To<Object>(info[2]));
 
+    uint16_t metadata = 0;
+    if (info.Length() > 3) {
+      Local<Integer> js_metadata;
+      if (Nan::To<Integer>(info[3]).ToLocal(&js_metadata)) {
+        metadata = static_cast<uint16_t>(js_metadata->Int32Value());
+      }
+    }
+
     if (start.IsJust() && deletion_extent.IsJust() && insertion_extent.IsJust()) {
-      if (!patch.Splice(start.FromJust(), deletion_extent.FromJust(), insertion_extent.FromJust())) {
+      if (!patch.Splice(start.FromJust(), deletion_extent.FromJust(), insertion_extent.FromJust(), metadata)) {
         Nan::ThrowError("Can't splice into a frozen patch");
       }
     }
