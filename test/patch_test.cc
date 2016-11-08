@@ -13,8 +13,8 @@ uint16_t *str(const char *text) {
 TEST_CASE("Records simple non-overlapping splices") {
   Patch patch;
 
-  patch.Splice(Point{0, 5}, Point{0, 3}, Point{0, 4}, str("abcd"));
-  patch.Splice(Point{0, 10}, Point{0, 3}, Point{0, 4}, str("efgh"));
+  patch.Splice(Point{0, 5}, Point{0, 3}, Point{0, 4}, str("abcd"), 4);
+  patch.Splice(Point{0, 10}, Point{0, 3}, Point{0, 4}, str("efgh"), 4);
   REQUIRE(patch.GetHunks() == vector<Hunk>({
     Hunk{
       Point{0, 5}, Point{0, 8},
@@ -65,6 +65,20 @@ TEST_CASE("Records simple non-overlapping splices") {
       Point{0, 9}, Point{0, 12},
       Point{0, 19}, Point{0, 23},
       str("efgh")
+    }
+  }));
+}
+
+TEST_CASE("Records simple overlapping splices") {
+  Patch patch;
+
+  patch.Splice(Point{0, 5}, Point{0, 3}, Point{0, 4}, str("abcd"), 4);
+  patch.Splice(Point{0, 7}, Point{0, 3}, Point{0, 4}, str("efgh"), 4);
+  REQUIRE(patch.GetHunks() == vector<Hunk>({
+    Hunk{
+      Point{0, 5}, Point{0, 9},
+      Point{0, 5}, Point{0, 11},
+      str("abefgh")
     }
   }));
 }

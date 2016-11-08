@@ -24,7 +24,9 @@ struct Node {
   uint16_t *text;
 
   ~Node() {
-    delete[] text;
+    if (text) {
+      delete[] text;
+    }
 
     if (left) {
       delete left;
@@ -234,10 +236,76 @@ Nan::Maybe<Hunk> Patch::HunkForPosition(Point target) {
 }
 
 bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_insertion_extent) {
-  return Splice(new_splice_start, new_deletion_extent, new_insertion_extent, nullptr);
+  return Splice(new_splice_start, new_deletion_extent, new_insertion_extent, nullptr, 0);
 }
 
-bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_insertion_extent, uint16_t *text) {
+size_t IndexForPoint(uint16_t *text, Point target) {
+  size_t result = 0;
+  Point position = Point::Zero();
+  while (position < target) {
+    if (text[result] == '\n') {
+      position.row++;
+      position.column = 0;
+    } else {
+      position.column++;
+    }
+    result++;
+  }
+  return result;
+}
+
+uint16_t *FillText(uint16_t *text, Point extent) {
+  uint16_t *c = text;
+  for (uint32_t i = 0; i < extent.row; i++) {
+    *(c++) = '\n';
+  }
+  for (uint32_t i = 0; i < extent.column; i++) {
+    *(c++) = ' ';
+  }
+  return c;
+}
+
+uint16_t *CopyText(uint16_t *destination, uint16_t *source, size_t count) {
+  memcpy(destination, source, count * sizeof(uint16_t));
+  return destination + count;
+}
+
+uint16_t *SpliceText(uint16_t *text, uint16_t *new_text, size_t new_length, Point position, Point new_extent) {
+  if (text && new_text) {
+    uint32_t index = IndexForPoint(text, position);
+    uint16_t *result = new uint16_t[index + new_length + 1];
+    uint16_t *c = CopyText(result, text, index);
+    c = CopyText(c, new_text, new_length);
+    *c = 0;
+    delete[] text;
+    delete[] new_text;
+    return result;
+  }
+
+  if (text && !new_text) {
+    uint32_t index = IndexForPoint(text, position);
+    uint16_t *result = new uint16_t[index + new_length + 1];
+    uint16_t *c = CopyText(result, text, index);
+    c = FillText(c, new_extent);
+    *c = 0;
+    delete[] text;
+    return result;
+  }
+
+  if (!text && new_text) {
+    uint16_t *result = new uint16_t[position.row + position.column + new_length];
+    uint16_t *c = FillText(result, position);
+    c = CopyText(c, new_text, new_length);
+    *c = 0;
+    delete[] text;
+    delete[] new_text;
+    return result;
+  }
+
+  return nullptr;
+}
+
+bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_insertion_extent, uint16_t *text, size_t text_length) {
   if (is_frozen) {
     return false;
   }
@@ -331,6 +399,7 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
       upper_bound->new_distance_from_left_ancestor = new_insertion_end.Traverse(upper_bound_new_start.Traversal(new_deletion_end));
       lower_bound->old_extent = old_deletion_end.Traversal(lower_bound_old_start);
       lower_bound->new_extent = new_extent_prefix.Traverse(new_insertion_extent);
+      lower_bound->text = SpliceText(lower_bound->text, text, text_length, new_extent_prefix, new_insertion_extent);
       lower_bound->DeleteRight();
       RotateNodeRight(lower_bound);
 
@@ -374,6 +443,13 @@ bool Patch::Splice(Point new_splice_start, Point new_deletion_extent, Point new_
 
     lower_bound->DeleteRight();
     if (overlaps_lower_bound) {
+      lower_bound->text = SpliceText(
+        lower_bound->text,
+        text,
+        text_length,
+        new_splice_start.Traversal(lower_bound_new_start),
+        new_insertion_extent
+      );
       lower_bound->old_extent = old_deletion_end.Traversal(lower_bound_old_start);
       lower_bound->new_extent = new_insertion_end.Traversal(lower_bound_new_start);
     } else {

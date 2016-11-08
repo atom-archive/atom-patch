@@ -12,7 +12,7 @@ class Patch {
   Patch(const std::vector<uint8_t>&);
   ~Patch();
   bool Splice(Point start, Point deletion_extent, Point insertion_extent);
-  bool Splice(Point start, Point deletion_extent, Point insertion_extent, uint16_t *text);
+  bool Splice(Point start, Point deletion_extent, Point insertion_extent, uint16_t *text, size_t text_length);
   std::vector<Hunk> GetHunks() const;
   std::vector<Hunk> GetHunksInNewRange(Point start, Point end);
   std::vector<Hunk> GetHunksInOldRange(Point start, Point end);
